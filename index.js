@@ -79,7 +79,7 @@ app.post('/saveArticle', async (req, res) => {
         let conn;
         try {
             conn = await pool.getConnection();
-            let sql = "INSERT INTO ARTICLES (TITLE, INTRO, CONTENT) VALUES ('" + req.body.params.title + "', '" + req.body.params.intro + "', '" + req.body.params.content + "');";
+            let sql = "INSERT INTO ARTICLES (TITLE, INTRO, CONTENT, CREATED) VALUES ('" + req.body.params.title + "', '" + req.body.params.intro + "', '" + req.body.params.content + "', SELECT CURRENT_DATE());";
             const res = await conn.query(sql);
             console.log(res);
         }
