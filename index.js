@@ -162,13 +162,34 @@ app.get('/getCookie', async (req, res) => {
     }
 });
 
+app.get('/logout', async (req, res) => {
+    let cookie = req.signedCookies['session'];
+    if (cookie) {
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            let sql = "UPDATE USER_SESSION SET DATE=NULL, TOKEN=NULL WHERE TOKEN='" + cookie + "';";
+            console.log(sql);
+            const response = await conn.query(sql);
+        }
+        catch (err) {
+            console.log(err);
+            throw(err);
+        }
+        finally {
+            if (conn) return conn.end();
+        }
+    }
+    res.send("wylogowano poprawnie");
+})
+
 app.post('/saveArticle', async (req, res) => {
     if( await sessionUpdate(req, res)) {
         let conn;
         try {
             conn = await pool.getConnection();
             let sql = "INSERT INTO ARTICLES (TITLE, INTRO, CONTENT, CREATED) VALUES ('" + req.body.params.title + "', '" + req.body.params.intro + "', '" + req.body.params.content + "', SELECT CURRENT_DATE());";
-            const res = await conn.query(sql);
+            const result = await conn.query(sql);
         }
         catch (err) {
             console.log(err);
