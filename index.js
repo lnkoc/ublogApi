@@ -102,7 +102,7 @@ app.get('/loginFirst', async (req, res) => {
             throw(err);
         }
         finally {
-            if (conn) return conn.end();
+            if (conn) conn.end();
         }
     }
     else {
@@ -154,7 +154,7 @@ app.get('/getCookie', async (req, res) => {
             throw (err);
         }
         finally {
-            if (conn) return conn.end();
+            if (conn) conn.end();
         }
     }
     else {
@@ -169,7 +169,6 @@ app.get('/logout', async (req, res) => {
         try {
             conn = await pool.getConnection();
             let sql = "UPDATE USER_SESSION SET DATE=NULL, TOKEN=NULL WHERE TOKEN='" + cookie + "';";
-            console.log(sql);
             const response = await conn.query(sql);
         }
         catch (err) {
@@ -177,28 +176,31 @@ app.get('/logout', async (req, res) => {
             throw(err);
         }
         finally {
-            if (conn) return conn.end();
+            if (conn) conn.end();
         }
     }
     res.send("wylogowano poprawnie");
 })
 
 app.post('/saveArticle', async (req, res) => {
+    let article = req.body.params;
     if( await sessionUpdate(req, res)) {
+        console.log("ciacho updated");
         let conn;
         try {
             conn = await pool.getConnection();
-            let sql = "INSERT INTO ARTICLES (TITLE, INTRO, CONTENT, CREATED) VALUES ('" + req.body.params.title + "', '" + req.body.params.intro + "', '" + req.body.params.content + "', SELECT CURRENT_DATE());";
+            let sql = "INSERT INTO ARTICLES (TITLE, INTRO, CONTENT, CREATED) VALUES ('" + article.title + "', '" + article.intro + "', '" + article.content + "', (SELECT CURRENT_DATE()));";
             const result = await conn.query(sql);
+            console.log("try works");
         }
         catch (err) {
             console.log(err);
             throw err;
         }
         finally {
-            if (conn) return conn.end();
+            if (conn) conn.end();
         }
-        res.send("dane przesłane popprawnie");
+        res.status(201).send("dane przesłane popprawnie");
     }
     else {
         res.status(401).send("Brak autoryzacji");
@@ -218,7 +220,7 @@ app.get('/getList', async (req, res) => {
         throw err;
     }
     finally {
-        if (conn) return conn.end();
+        if (conn) conn.end();
     }
 })
 
@@ -235,7 +237,7 @@ app.get('/getEntireArticle', async (req, res) => {
         throw err;
     }
     finally {
-        if (conn) return conn.end();
+        if (conn) conn.end();
     }
 })
 
@@ -252,7 +254,7 @@ app.post('/getArticle', async (req, res) => {
             console.log(err);
         }
         finally {
-            if (conn) return conn.end();
+            if (conn) conn.end();
         }
     }
     else {
@@ -275,7 +277,7 @@ app.post('/updateArticle', async (req, res) => {
             console.log(err);
         }
         finally {
-            if (conn) return conn.end();
+            if (conn) conn.end();
         }
     }
     else {
@@ -298,7 +300,7 @@ app.post('/deleteArticle', async (req, res) => {
             console.log(err);
         }
         finally {
-            if (conn) return conn.end();
+            if (conn) conn.end();
         }
     }
     else {
