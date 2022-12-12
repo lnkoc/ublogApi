@@ -16,72 +16,159 @@ const pool = mariadb.createPool({
     connectionLimit: 5
 });
 
-app.get('/login', (req, res) => {
+function getToken() {
+    let time = new Date();
+    return "token" + time.getFullYear() * (time.getDate() + 1) * (time.getMilliseconds() + 1);
+}
+
+async function sessionUpdate(req, res) {
+    let cookie = req.signedCookies["session"];
+    let success;
+    if (cookie) {
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            let sql = "SELECT (NOW() - (SELECT DATE FROM USER_SESSION)) AS AGE, TOKEN FROM USER_SESSION  WHERE TOKEN='" + cookie + "';";
+            result = await conn.query(sql);
+            if (result.length === 1) {
+                if (result[0].AGE < 3000) {
+                    let token = getToken();
+                    let sql2 = "UPDATE USER_SESSION SET DATE = (SELECT NOW()), TOKEN='" + token + "' WHERE TOKEN='" + cookie + "';";
+                    result2 = await conn.query(sql2);
+                    let options = {
+                        maxAge: 1000 * 60 * 1,
+                        httpOnly: true,
+                        signed: true
+                    }
+                    res.cookie('session', token, options);
+                    success = true;
+                }
+                else {
+                    // res.end("Sesja wygasła");
+                    success = false;    
+                }
+            }
+            else {
+                // console.log("zmdyfikowano ciacho");
+                success = false;
+            }
+        }
+        catch (err) {
+            console.log(err);
+            success = false;
+        }
+        finally {
+            if (conn) conn.end();
+        }
+    }
+    else {
+        // res.status(401).send("Brak autoryzacji");
+        success = false;
+    }
+    return success;
+};
+
+app.get('/loginFirst', async (req, res) => {
     let data = req.query;
     if (req.signedCookies["shortSession"] === undefined) {
-
-    //todo dopisać sprawdzenie z bazy danych
-        if (data.login === "lnkoc") {
-            if (data.first == 1) {
-                if (data.last == 5) {
-                    console.log("poprawne dane z pierwszego etapu");
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            let sql = "SELECT USER, PASSWORD FROM USER_SESSION WHERE USER='" + data.login + "';";
+            const result = await conn.query(sql);
+            if (result.length == 1) {
+                let pass = result[0].PASSWORD;
+                let first = pass[0];
+                let last = pass[pass.length - 1];
+                if ((data.first === first) && (data.last === last)) {
                     let options = {
                         maxAge: 1000 * 15, // 15 sekund na przesłanie poprawnych danych
                         httpOnly: true,
                         signed: true
                     }
-                    res.cookie('shortSession', "one", options);
-                    res.status(200).end();
+                    res.cookie('shortSession', "one two three", options);
+                    res.status(200).end(); 
                 }
                 else {
-                    res.end("Niepoprawny login lub hasło");
-                }
+                    res.end("Niepoprawny login lub hasło.");
+                }          
             }
             else {
                 res.end("Niepoprawny login lub hasło");
             }
         }
-        else {
-            res.end("Niepoprawny login lub hasło");
+        catch (err) {
+            console.log("Blad" + err);
+            throw(err);
+        }
+        finally {
+            if (conn) return conn.end();
         }
     }
     else {
-        if (req.signedCookies["shortSession"] == "one") {
+        if (req.signedCookies["shortSession"] == "one two three") {
             res.status(400).send("Serwer chwilowo niedostępny.");
+            res.end();
         }
-        
     }
 });
 
-app.get('/getCookie', (req, res) => {
-   if (req.signedCookies["shortSession"] == "one") {
-
-    //todo dopisać sprawdzenie z BD
+app.get('/getCookie', async (req, res) => {
+    if (req.signedCookies["shortSession"] == "one two three") {
         let data = req.query;
-        if (data.pass === "12345") {
-            console.log("poprawne logowanie drugiego etapu");
-            let options = {
-            maxAge: 1000 * 60 * 60,
-            httpOnly: true,
-            signed: true
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            let sql = "SELECT USER, PASSWORD FROM USER_SESSION WHERE USER='" + data.login + "';";
+            const result = await conn.query(sql);
+            if (result.length == 1) {
+                let pass = result[0].PASSWORD;
+                
+                //todo szyfrowanie pass
+
+                if (pass == data.pass) {
+
+                    let token = getToken();
+                    let sql2 = "UPDATE USER_SESSION SET DATE=(SELECT NOW()), TOKEN='" + token + "' WHERE USER='" + data.login + "';";
+                    const result2 = await conn.query(sql2);
+                    let options = {
+                        maxAge: 1000 * 60 * 30,
+                        httpOnly: true,
+                        signed: true
+                    }
+                    res.cookie('session', token, options);
+                    res.status(200).send();
+                    console.log("nadany token " + token);
+                    
+                }
+                else {
+                    res.status(401).send("Brak autoryzacji");
+                }
             }
-            res.cookie('longSession', "two", options);
-            res.status(200).send();
+            else {
+                res.status(401).send("Brak autoryzacji");
+            }
+        }
+        catch (err) {
+            console.log(err);
+            throw (err);
+        }
+        finally {
+            if (conn) return conn.end();
         }
     }
-
+    else {
+        res.status(401).send("Brak autoryzacji");
+    }
 });
 
 app.post('/saveArticle', async (req, res) => {
-    if(req.signedCookies["longSession"] == "two") {
-        // console.log("correct cookie");
-        console.log(req.body.params);
+    if( await sessionUpdate(req, res)) {
         let conn;
         try {
             conn = await pool.getConnection();
             let sql = "INSERT INTO ARTICLES (TITLE, INTRO, CONTENT, CREATED) VALUES ('" + req.body.params.title + "', '" + req.body.params.intro + "', '" + req.body.params.content + "', SELECT CURRENT_DATE());";
             const res = await conn.query(sql);
-            console.log(res);
         }
         catch (err) {
             console.log(err);
@@ -131,8 +218,8 @@ app.get('/getEntireArticle', async (req, res) => {
     }
 })
 
-app.post('/getArticle', async (req, res) => {
-    if(req.signedCookies["longSession"] == "two") {
+app.post('/getArticle', async (req, res) => {    
+    if(await sessionUpdate(req, res)) {
         let conn;
         try {
             conn = await pool.getConnection();
@@ -153,7 +240,7 @@ app.post('/getArticle', async (req, res) => {
 })
 
 app.post('/updateArticle', async (req, res) => {
-    if(req.signedCookies["longSession"] == "two") {
+    if(await sessionUpdate(req, res)) {
         let conn;
         try {
             conn = await pool.getConnection();
@@ -176,7 +263,7 @@ app.post('/updateArticle', async (req, res) => {
 })
 
 app.post('/deleteArticle', async (req, res) => {
-    if(req.signedCookies["longSession"] == "two") {
+    if(await sessionUpdate(req, res)) {
         let conn;
         try {
             conn = await pool.getConnection();
