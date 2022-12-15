@@ -36,7 +36,7 @@ async function sessionUpdate(req, res) {
                     let sql2 = "UPDATE USER_SESSION SET DATE = (SELECT NOW()), TOKEN='" + token + "' WHERE TOKEN='" + cookie + "';";
                     result2 = await conn.query(sql2);
                     let options = {
-                        maxAge: 1000 * 60 * 1,
+                        maxAge: 1000 * 60 * 30,
                         httpOnly: true,
                         signed: true
                     }
