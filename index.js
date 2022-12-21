@@ -308,5 +308,11 @@ app.post('/deleteArticle', async (req, res) => {
     }
 })
 
+app.post('/sendEmail', async (req, res) => {
+    console.log("email: " + req.body.params.email);
+    console.log("content: " + req.body.params.content);
+    res.send("Poprawnie odebrano email");
+})
+
 app.use(express.static('dist'));
 app.listen(3000, '127.0.0.1');
