@@ -1,4 +1,5 @@
 const express = require('express');
+const history = require('connect-history-api-fallback');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const mariadb = require('mariadb');
@@ -6,6 +7,7 @@ const app = express();
 
 app.use(cookieParser("TajemniczyCiągZnaków"));
 app.use(bodyParser.urlencoded({extended:true}));
+app.use(history());
 app.use(bodyParser.json());
 
 const pool = mariadb.createPool({
@@ -309,6 +311,7 @@ app.post('/deleteArticle', async (req, res) => {
 })
 
 app.post('/sendEmail', async (req, res) => {
+
     console.log("email: " + req.body.params.email);
     console.log("content: " + req.body.params.content);
     res.send("Poprawnie odebrano email");
