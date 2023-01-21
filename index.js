@@ -126,7 +126,7 @@ app.get('/getCookie', async (req, res) => {
             if (result.length == 1) {
                 let pass = result[0].PASSWORD;
                 
-                //todo szyfrowanie pass
+                //TODO szyfrowanie pass
 
                 if (pass == data.pass) {
 
@@ -187,7 +187,6 @@ app.get('/logout', async (req, res) => {
 app.post('/saveArticle', async (req, res) => {
     let article = req.body.params;
     if( await sessionUpdate(req, res)) {
-        console.log("ciacho updated");
         let conn;
         try {
             conn = await pool.getConnection();
@@ -255,6 +254,7 @@ app.post('/getArticle', async (req, res) => {
         }
         catch (err) {
             console.log(err);
+            throw err;
         }
         finally {
             if (conn) conn.end();
@@ -278,6 +278,7 @@ app.post('/updateArticle', async (req, res) => {
         }
         catch (err) {
             console.log(err);
+            throw err;
         }
         finally {
             if (conn) conn.end();
@@ -301,6 +302,7 @@ app.post('/deleteArticle', async (req, res) => {
         }
         catch (err) {
             console.log(err);
+            throw err;
         }
         finally {
             if (conn) conn.end();
@@ -324,6 +326,7 @@ app.post('/saveComment', async (req, res) => {
     }
     catch (err) {
         console.log(err);
+        throw err;
     }
     finally {
         if (conn) conn.end();
@@ -335,7 +338,7 @@ app.post('/getComments', async (req, res) => {
     let conn;
     try {
         conn = await pool.getConnection();
-        let sql = "SELECT CREATED, NICKNAME, CONTENT FROM COMMENTS WHERE APPROVED='1' AND TRASH='0' AND ARTICLE_ID='" + articleId + "' ORDER BY ID;";
+        let sql = "SELECT CREATED, NICKNAME, CONTENT, ID FROM COMMENTS WHERE APPROVED='1' AND TRASH='0' AND ARTICLE_ID='" + articleId + "' ORDER BY ID;";
         console.log(sql);
         const result = await conn.query(sql);
         console.log(result);
@@ -343,6 +346,7 @@ app.post('/getComments', async (req, res) => {
     }
     catch (err) {
         console.log(err);
+        throw err;
     }
     finally {
         if (conn) conn.end();
@@ -360,6 +364,7 @@ app.post('/getUndoneComments', async (req, res) => {
         }
         catch (err) {
             console.log("getUndoneComments" + err);
+            throw err;
         }
         finally {
             if (conn) conn.end();
@@ -382,6 +387,7 @@ app.get('/confirmComment', async (req, res) => {
         }
         catch (err) {
             console.log(err);
+            throw err;
         }
         finally {
             if (conn) conn.end();
@@ -404,6 +410,7 @@ app.get('/denyComment', async (req, res) => {
         }
         catch (err) {
             console.log(err);
+            throw err;
         }
         finally {
             if (conn) conn.end();
