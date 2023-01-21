@@ -251,6 +251,7 @@ app.post('/getArticle', async (req, res) => {
             let sql = "SELECT TITLE, INTRO, CONTENT FROM ARTICLES WHERE ID = '" + req.body.params.id +"';";
             const result = await conn.query(sql);
             res.send(result);
+            console.log("szukano id " + req.body.params.id);
         }
         catch (err) {
             console.log(err);
@@ -297,6 +298,109 @@ app.post('/deleteArticle', async (req, res) => {
             const result = await conn.query(sql);
             console.log(result);
             res.send("delete completed");
+        }
+        catch (err) {
+            console.log(err);
+        }
+        finally {
+            if (conn) conn.end();
+        }
+    }
+    else {
+        res.status(401).send("Brak autoryzacji");
+    }
+})
+
+app.post('/saveComment', async (req, res) => {
+    let comment = req.body.params;
+    let conn;
+    try {
+        conn = await pool.getConnection();
+        let sql = "INSERT INTO COMMENTS (ARTICLE_ID, NICKNAME, CREATED, CONTENT) VALUES ('" + comment.articleId + "', '" + comment.nickname + "', (SELECT CURRENT_DATE()), '" + comment.content + "');";
+        console.log(sql);
+        const result = await conn.query(sql);
+        console.log(result);
+        res.send("Komentarz zapisany, powinien pojawić się wkrótce");
+    }
+    catch (err) {
+        console.log(err);
+    }
+    finally {
+        if (conn) conn.end();
+    }
+})
+
+app.post('/getComments', async (req, res) => {
+    let articleId = req.body.params.articleId;
+    let conn;
+    try {
+        conn = await pool.getConnection();
+        let sql = "SELECT CREATED, NICKNAME, CONTENT FROM COMMENTS WHERE APPROVED='1' AND TRASH='0' AND ARTICLE_ID='" + articleId + "' ORDER BY ID;";
+        console.log(sql);
+        const result = await conn.query(sql);
+        console.log(result);
+        res.send(result);
+    }
+    catch (err) {
+        console.log(err);
+    }
+    finally {
+        if (conn) conn.end();
+    }
+})
+
+app.post('/getUndoneComments', async (req, res) => {
+    if (await sessionUpdate(req, res)) {
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            let sql = "SELECT ARTICLES.TITLE, ARTICLES.INTRO, COMMENTS.ID, COMMENTS.NICKNAME, COMMENTS.CREATED, COMMENTS.CONTENT FROM ARTICLES, COMMENTS WHERE COMMENTS.ARTICLE_ID=ARTICLES.ID AND COMMENTS.APPROVED='0' AND COMMENTS.TRASH='0' ORDER BY TITLE, ID;";
+            const result = await conn.query(sql);
+            res.send(result);
+        }
+        catch (err) {
+            console.log("getUndoneComments" + err);
+        }
+        finally {
+            if (conn) conn.end();
+        }
+    }
+    else {
+        res.status(401).send("Brak autoryzacji");
+    }
+})
+
+app.get('/confirmComment', async (req, res) => {
+    if (await sessionUpdate(req, res)) {
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            let sql = "UPDATE COMMENTS SET APPROVED='1' WHERE ID='" + req.query.commentId + "';";
+            const result = conn.query(sql);
+            console.log(result);
+            res.send("Zatwierdzono komentarz o id " + req.query.commentId);
+        }
+        catch (err) {
+            console.log(err);
+        }
+        finally {
+            if (conn) conn.end();
+        }
+    }
+    else {
+        res.status(401).send("Brak autoryzacji");
+    }
+})
+
+app.get('/denyComment', async (req, res) => {
+    if (await sessionUpdate(req, res)) {
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            let sql = "UPDATE COMMENTS SET TRASH='1' WHERE ID='" + req.query.commentId + "';";
+            const result = conn.query(sql);
+            console.log(result);
+            res.send("Przeniesiono do kosza komentarz o id " + req.query.commentId);
         }
         catch (err) {
             console.log(err);
