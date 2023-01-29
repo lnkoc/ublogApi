@@ -421,6 +421,30 @@ app.get('/denyComment', async (req, res) => {
     }
 })
 
+app.post('/getBinComments', async (req, res) => {
+    if (await sessionUpdate(req, res)) {
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            let sql = "SELECT ARTICLES.TITLE, ARTICLES.INTRO, COMMENTS.ID, COMMENTS.NICKNAME, COMMENTS.CREATED, COMMENTS.CONTENT FROM ARTICLES, COMMENTS WHERE COMMENTS.TRASH='1' AND COMMENTS.ARTICLE_ID=ARTICLES.ID;";
+            const result = await conn.query(sql);
+            console.log(result);
+            res.send(result);
+        }
+        catch (err) {
+            console.log(err);
+            throw err;
+        }
+        finally {
+            if (conn) conn.end();
+        }
+    }
+    else {
+        res.status(401).send("Brak autoryzacji");
+    }
+})
+// app.get('')
+
 app.post('/sendEmail', async (req, res) => {
 
     console.log("email: " + req.body.params.email);
