@@ -23,6 +23,41 @@ function getToken() {
     return "token" + time.getFullYear() * (time.getDate() + 1) * (time.getMilliseconds() + 1);
 }
 
+async function credentialsCheck(req) {
+    let cookie = req.signedCookies["session"];
+    let confirm;
+    if (cookie) {
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            let sql = "SELECT (NOW() - (SELECT DATE FROM USER_SESSION)) AS AGE FROM USER_SESSION WHERE TOKEN='" + cookie + "';";
+            const result = await conn.query(sql);
+            if (result.length == 1) {
+                if (result[0].AGE < 3000) {
+                    confirm = true;
+                }
+                else {
+                    confirm = false;
+                }
+            }
+            else {
+                confirm = false;
+            }
+        }
+        catch (err) {
+            console.log(err);
+            throw err;
+        }
+        finally {
+            if (conn) conn.end();
+        }
+    }
+    else {
+        confirm = false;
+    }
+    return confirm;
+}
+
 async function sessionUpdate(req, res) {
     let cookie = req.signedCookies["session"];
     let success;
@@ -31,12 +66,12 @@ async function sessionUpdate(req, res) {
         try {
             conn = await pool.getConnection();
             let sql = "SELECT (NOW() - (SELECT DATE FROM USER_SESSION)) AS AGE, TOKEN FROM USER_SESSION  WHERE TOKEN='" + cookie + "';";
-            result = await conn.query(sql);
+            const result = await conn.query(sql);
             if (result.length === 1) {
                 if (result[0].AGE < 3000) {
-                    let token = getToken();
+                    let token = getToken(); // ostrożnie z korzystaniem - ponieważ powstaje efekt wyścigów
                     let sql2 = "UPDATE USER_SESSION SET DATE = (SELECT NOW()), TOKEN='" + token + "' WHERE TOKEN='" + cookie + "';";
-                    result2 = await conn.query(sql2);
+                    let result2 = await conn.query(sql2);
                     let options = {
                         maxAge: 1000 * 60 * 30,
                         httpOnly: true,
@@ -46,13 +81,13 @@ async function sessionUpdate(req, res) {
                     success = true;
                 }
                 else {
-                    // res.end("Sesja wygasła");
-                    success = false;    
+                    success = false;
+                    console.log("1_if");    
                 }
             }
             else {
-                // console.log("zmdyfikowano ciacho");
-                success = false;
+                  success = false;
+                console.log("2_if");
             }
         }
         catch (err) {
@@ -64,7 +99,7 @@ async function sessionUpdate(req, res) {
         }
     }
     else {
-        // res.status(401).send("Brak autoryzacji");
+         console.log("3_if");
         success = false;
     }
     return success;
@@ -100,7 +135,7 @@ app.get('/loginFirst', async (req, res) => {
             }
         }
         catch (err) {
-            console.log("Blad" + err);
+            console.log(err);
             throw(err);
         }
         finally {
@@ -109,8 +144,7 @@ app.get('/loginFirst', async (req, res) => {
     }
     else {
         if (req.signedCookies["shortSession"] == "one two three") {
-            res.status(400).send("Serwer chwilowo niedostępny.");
-            res.end();
+            res.status(400).end("Serwer chwilowo niedostępny.");
         }
     }
 });
@@ -165,6 +199,7 @@ app.get('/getCookie', async (req, res) => {
 });
 
 app.get('/logout', async (req, res) => {
+    //TODO sprawdzić poprawność ciacha
     let cookie = req.signedCookies['session'];
     if (cookie) {
         let conn;
@@ -181,18 +216,17 @@ app.get('/logout', async (req, res) => {
             if (conn) conn.end();
         }
     }
-    res.send("wylogowano poprawnie");
+    res.end("wylogowano");
 })
 
 app.post('/saveArticle', async (req, res) => {
     let article = req.body.params;
-    if( await sessionUpdate(req, res)) {
+    if( await credentialsCheck(req)) {
         let conn;
         try {
             conn = await pool.getConnection();
             let sql = "INSERT INTO ARTICLES (TITLE, INTRO, CONTENT, CREATED) VALUES ('" + article.title + "', '" + article.intro + "', '" + article.content + "', (SELECT CURRENT_DATE()));";
             const result = await conn.query(sql);
-            console.log("try works");
         }
         catch (err) {
             console.log(err);
@@ -202,13 +236,15 @@ app.post('/saveArticle', async (req, res) => {
             if (conn) conn.end();
         }
         res.status(201).send("dane przesłane popprawnie");
+        //TODO Przetestować rozwiązanie
+        //await sessionUpdate(req, res);
     }
     else {
-        res.status(401).send("Brak autoryzacji");
+        res.status(401).send("Brak autoryzacji lub sesja wygasła.");
     }
 })
 
-app.get('/getList', async (req, res) => {
+app.get('/getBlogList', async (req, res) => {
     let conn;
     try {
         conn = await pool.getConnection();
@@ -225,7 +261,30 @@ app.get('/getList', async (req, res) => {
     }
 })
 
-app.get('/getEntireArticle', async (req, res) => {
+app.get('/getArticlesList', async (req, res) => {
+    if (await credentialsCheck(req)) {
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            let sql = "SELECT ID, TITLE, CREATED, INTRO FROM ARTICLES ORDER BY ID DESC;";
+            const result = await conn.query(sql);
+            res.send(result);
+        }
+        catch (err) {
+            console.log(err);
+            throw err;
+        }
+        finally {
+            if (conn) conn.end();
+        }
+        //TODO przetestować rozwiązanie
+        //await sessionUpdate(req, res);
+    } else {
+        res.status(401).send("Brak autoryzacji");
+    }
+})
+
+app.get('/getBlogArticle', async (req, res) => {
     let conn;
     try {
         conn = await pool.getConnection();
@@ -243,14 +302,13 @@ app.get('/getEntireArticle', async (req, res) => {
 })
 
 app.post('/getArticle', async (req, res) => {    
-    if(await sessionUpdate(req, res)) {
+    if (await credentialsCheck(req)) {
         let conn;
         try {
             conn = await pool.getConnection();
-            let sql = "SELECT TITLE, INTRO, CONTENT FROM ARTICLES WHERE ID = '" + req.body.params.id +"';";
+            let sql = "SELECT TITLE, INTRO, CONTENT, CREATED FROM ARTICLES WHERE ID = '" + req.body.params.id +"';";
             const result = await conn.query(sql);
             res.send(result);
-            console.log("szukano id " + req.body.params.id);
         }
         catch (err) {
             console.log(err);
@@ -266,14 +324,12 @@ app.post('/getArticle', async (req, res) => {
 })
 
 app.post('/updateArticle', async (req, res) => {
-    if(await sessionUpdate(req, res)) {
+    if(await credentialsCheck(req)) {
         let conn;
         try {
             conn = await pool.getConnection();
             let sql = "UPDATE ARTICLES SET TITLE = '" + req.body.params.title + "', INTRO = '" + req.body.params.intro + "', CONTENT = '" + req.body.params.content + "' WHERE ID = '" + req.body.params.id + "';";
-            console.log(sql);
             const result = await conn.query(sql);
-            console.log(result);
             res.send("update copleted");
         }
         catch (err) {
@@ -290,14 +346,12 @@ app.post('/updateArticle', async (req, res) => {
 })
 
 app.post('/deleteArticle', async (req, res) => {
-    if(await sessionUpdate(req, res)) {
+    if(await credentialsCheck(req)) {
         let conn;
         try {
             conn = await pool.getConnection();
             let sql = "DELETE FROM ARTICLES WHERE ID = '" + req.body.params.id + "';";
-            console.log(sql);
             const result = await conn.query(sql);
-            console.log(result);
             res.send("delete completed");
         }
         catch (err) {
@@ -319,9 +373,7 @@ app.post('/saveComment', async (req, res) => {
     try {
         conn = await pool.getConnection();
         let sql = "INSERT INTO COMMENTS (ARTICLE_ID, NICKNAME, CREATED, CONTENT) VALUES ('" + comment.articleId + "', '" + comment.nickname + "', (SELECT CURRENT_DATE()), '" + comment.content + "');";
-        console.log(sql);
         const result = await conn.query(sql);
-        console.log(result);
         res.send("Komentarz zapisany, powinien pojawić się wkrótce");
     }
     catch (err) {
@@ -332,16 +384,14 @@ app.post('/saveComment', async (req, res) => {
         if (conn) conn.end();
     }
 })
-
+//TODO 
 app.post('/getComments', async (req, res) => {
     let articleId = req.body.params.articleId;
     let conn;
     try {
         conn = await pool.getConnection();
         let sql = "SELECT CREATED, NICKNAME, CONTENT, ID FROM COMMENTS WHERE APPROVED='1' AND TRASH='0' AND ARTICLE_ID='" + articleId + "' ORDER BY ID;";
-        console.log(sql);
         const result = await conn.query(sql);
-        console.log(result);
         res.send(result);
     }
     catch (err) {
@@ -354,7 +404,7 @@ app.post('/getComments', async (req, res) => {
 })
 
 app.post('/getUndoneComments', async (req, res) => {
-    if (await sessionUpdate(req, res)) {
+    if (await credentialsCheck(req)) {
         let conn;
         try {
             conn = await pool.getConnection();
@@ -363,7 +413,7 @@ app.post('/getUndoneComments', async (req, res) => {
             res.send(result);
         }
         catch (err) {
-            console.log("getUndoneComments" + err);
+            console.log(err);
             throw err;
         }
         finally {
@@ -371,18 +421,17 @@ app.post('/getUndoneComments', async (req, res) => {
         }
     }
     else {
-        res.status(401).send("Brak autoryzacji");
+        res.send("undone comments Brak autoryzacji");
     }
 })
 
 app.get('/confirmComment', async (req, res) => {
-    if (await sessionUpdate(req, res)) {
+    if (await credentialsCheck(req)) {
         let conn;
         try {
             conn = await pool.getConnection();
             let sql = "UPDATE COMMENTS SET APPROVED='1' WHERE ID='" + req.query.commentId + "';";
             const result = conn.query(sql);
-            console.log(result);
             res.send("Zatwierdzono komentarz o id " + req.query.commentId);
         }
         catch (err) {
@@ -399,13 +448,12 @@ app.get('/confirmComment', async (req, res) => {
 })
 
 app.get('/denyComment', async (req, res) => {
-    if (await sessionUpdate(req, res)) {
+    if (await credentialsCheck(req)) {
         let conn;
         try {
             conn = await pool.getConnection();
             let sql = "UPDATE COMMENTS SET TRASH='1' WHERE ID='" + req.query.commentId + "';";
             const result = conn.query(sql);
-            console.log(result);
             res.send("Przeniesiono do kosza komentarz o id " + req.query.commentId);
         }
         catch (err) {
@@ -422,14 +470,37 @@ app.get('/denyComment', async (req, res) => {
 })
 
 app.post('/getBinComments', async (req, res) => {
-    if (await sessionUpdate(req, res)) {
+    if (await credentialsCheck(req)) {
         let conn;
         try {
             conn = await pool.getConnection();
             let sql = "SELECT ARTICLES.TITLE, ARTICLES.INTRO, COMMENTS.ID, COMMENTS.NICKNAME, COMMENTS.CREATED, COMMENTS.CONTENT FROM ARTICLES, COMMENTS WHERE COMMENTS.TRASH='1' AND COMMENTS.ARTICLE_ID=ARTICLES.ID;";
             const result = await conn.query(sql);
-            console.log(result);
             res.send(result);
+        }
+        catch (err) {
+            console.log(err);
+            throw err;
+        }
+        finally {
+            if (conn) conn.end();
+        }
+    }
+    else {
+        console.log("get bin comments nie diała");
+        res.send("get bin comments Brak autoryzacji");
+    }
+})
+
+app.get('/restoreComment', async (req, res) => {
+    if (await credentialsCheck(req)) {
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            let sql = "UPDATE COMMENTS SET TRASH='0' WHERE ID='" + req.query.commentId + "';";
+            // console.log(sql);
+            const result = await conn.query(sql);
+            res.status(201).send("przywrócono...");
         }
         catch (err) {
             console.log(err);
@@ -443,7 +514,28 @@ app.post('/getBinComments', async (req, res) => {
         res.status(401).send("Brak autoryzacji");
     }
 })
-// app.get('')
+
+app.get('/deleteComment', async (req, res) => {
+    if (await credentialsCheck(req)) {
+        let conn;
+        try {
+            conn = await pool.getConnection();
+            let sql = "DELETE FROM COMMENTS WHERE ID='" + req.query.commentId + "';";
+            const result = conn.query(sql);
+            res.send("Usunięto komentarz o id: " + req.query.commentId);
+        }
+        catch (err) {
+            console.log(err);
+            throw err;
+        }
+        finally {
+            if (conn) conn.end;
+        }
+    }
+    else {
+        res.status(401).send("Brak autoryzacji");
+    }
+})
 
 app.post('/sendEmail', async (req, res) => {
 
